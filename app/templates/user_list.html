@@ -1,0 +1,400 @@
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Список пользователей</title>
+    <h2 id="welcome"></h2>
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+<h1>Список пользователей</h1>
+<input type="text" id="filter" placeholder="Фильтр по имени...">
+<input type="text" id="positionInput" placeholder="Введите название должности">
+<button id="filterButton">Фильтр по названию должности</button>
+<div id="userList"></div>
+<button onclick="addUser()">Добавить пользователя</button>
+
+<div id="positionFormContainer">
+    <button id="togglePositionFormBtn">Создать должность</button>
+    <form id="positionForm" style="display: none;" method="POST" action="/submit-position">
+        <label for="title">Название должности:</label>
+        <input type="text" id="title" name="title" required><br><br>
+
+        <label for="rights_level">Уровень прав:</label>
+        <select id="rights_level" name="rights_level" required>
+            <option value="" disabled selected>Выберите уровень прав</option>
+            <option value="1">Неактивный сотрудник</option>
+            <option value="2">Сотрудник</option>
+            <option value="3">Менеджер</option>
+            <option value="4">Администратор</option>
+        </select><br><br>
+
+        <button type="submit">Отправить</button>
+    </form>
+</div>
+<table id="userTable">
+    <thead>
+    <tr>
+        <th>Имя</th>
+        <th>Фамилия</th>
+        <th>Должность</th>
+        <th>Действия</th>
+    </tr>
+    </thead>
+    <tbody id="userTableBody">
+    </tbody>
+</table>
+
+<div id="userModal" style="display:none;">
+    <h2>Информация о пользователе</h2>
+    <div id="userInfo"></div>
+    <button onclick="closeModal()">Закрыть</button>
+</div>
+
+<script>
+
+    function displayWelcomeMessage() {
+        const username = localStorage.getItem('username');
+        const welcomeMessage = username ? `Вы зашли как: ${username}` : 'Вы зашли как: анонимный пользователь';
+        document.getElementById('welcome').innerText = welcomeMessage;
+    }
+
+
+    async function fetchUsers() {
+        const response = await fetch('/users_json/');
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Ошибка:', response.status, errorText);
+            return;
+        }
+
+        const users = await response.json();
+        const userTableBody = document.getElementById('userTableBody');
+
+        userTableBody.innerHTML = '';
+
+        users.forEach(user => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                    <td>${user.first_name}</td>
+                    <td>${user.last_name}</td>
+                    <td>${user.position ? user.position.title : 'Нет должности'}</td>
+                    <td>
+                        <button onclick="showUserInfo(${user.id})">Просмотреть</button>
+                        <button onclick="editUser(${user.id})">Редактировать</button>
+                        <button onclick="deleteUser(${user.id})">Уволить</button>
+                    </td>
+                `;
+            userTableBody.appendChild(row);
+        });
+    }
+
+    async function filterUsersByPosition() {
+    const position = document.getElementById('positionInput').value;
+    const response = await fetch(`/users_json?position=${encodeURIComponent(position)}`);
+    const users = await response.json();
+    const userTableBody = document.getElementById('userTableBody');
+    userTableBody.innerHTML = '';
+    users.forEach(user => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                    <td>${user.first_name}</td>
+                    <td>${user.last_name}</td>
+                    <td>${user.position ? user.position.title : 'Нет должности'}</td>
+                    <td>
+                        <button onclick="showUserInfo(${user.id})">Просмотреть</button>
+                        <button onclick="editUser(${user.id})">Редактировать</button>
+                        <button onclick="deleteUser(${user.id})">Уволить</button>
+                    </td>
+                `;
+            userTableBody.appendChild(row);
+    });
+}
+
+// Привязка функции к кнопке
+document.getElementById('filterButton').addEventListener('click', filterUsersByPosition);
+    async function fetchPositions() {
+        const positionsResponse = await fetch('/positions/');
+        const positions = await positionsResponse.json();
+        const positionList = document.getElementById('positionList');
+        positionList.innerHTML = '';
+
+        positions.forEach(position => {
+            const listItem = document.createElement('li');
+            listItem.textContent = `${position.title} - Уровень прав: ${position.rights_level}`;
+
+            const editButton = document.createElement('button');
+            editButton.textContent = 'Редактировать';
+            editButton.onclick = () => editPosition(position.id);
+
+            listItem.appendChild(editButton);
+            positionList.appendChild(listItem);
+        });
+    }
+
+    async function showUserInfo(userId) {
+        const response = await fetch(`/users/${userId}/`);
+        const user = await response.json();
+        const userInfo = document.getElementById('userInfo');
+        const accessToken = localStorage.getItem('access_token')
+        userInfo.innerHTML = `
+                <p>Имя: ${user.first_name}</p>
+                <p>Фамилия: ${user.last_name}</p>
+                <p>Должность: ${user.position.title}</p>
+                <p>Дата создания: ${user.date_created}</p>
+                 <p>Дата увольнения: ${user.date_terminated || 'Не указана'}</p>
+            `;
+        document.getElementById('userModal').style.display = 'block';
+    }
+
+
+    function closeModal() {
+        document.getElementById('userModal').style.display = 'none';
+    }
+
+
+    async function editUser(userId) {
+        const response = await fetch(`/users/${userId}/`);
+        const user = await response.json();
+
+        const userInfo = document.getElementById('userInfo');
+        userInfo.innerHTML = `
+                <h2>Редактировать пользователя</h2>
+                <form id="editUserForm">
+                    <input type="hidden" name="id" value="${user.id}">
+                    <label for="first_name">Имя:</label>
+                    <input type="text" id="first_name" name="first_name" value="${user.first_name}" required>
+                    <br>
+                    <label for="last_name">Фамилия:</label>
+                    <input type="text" id="last_name" name="last_name" value="${user.last_name}" required>
+                    <br>
+                    <input type="hidden" id="username" name="username">
+                    <label for="position">Должность:</label>
+                    <select id="position" name="position" required>
+
+                    </select>
+                    <br>
+                    <button type="submit">Сохранить</button>
+                </form>
+            `;
+        document.getElementById('userModal').style.display = 'block';
+
+        const positionsResponse = await fetch('/positions/');
+        const positions = await positionsResponse.json();
+        const positionSelect = document.getElementById('position');
+        const accessToken = localStorage.getItem('access_token')
+        positions.forEach(position => {
+            const option = document.createElement('option');
+            option.value = position.id;
+            option.textContent = position.title;
+            if (position.id === user.position.id) {
+                option.selected = true;
+            }
+            positionSelect.appendChild(option);
+        });
+
+        document.getElementById('editUserForm').onsubmit = async (e) => {
+
+            const firstName = document.getElementById('first_name').value;
+            document.getElementById('username').value = firstName;
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            const accessToken = localStorage.getItem('access_token')
+            console.log("DATA", accessToken)
+
+            const response = await fetch(`/users/update/${userId}/`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Token ${accessToken}`,
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken'),
+                },
+                body: JSON.stringify(data),
+            });
+
+            if (!response.ok) {
+                if (response.status === 403) {
+                    throw new Error('Доступ запрещен. У вас нет прав для выполнения этого действия.');
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Ошибка при обновлении пользователя');
+                }
+            }
+
+            closeModal();
+            fetchUsers();
+        };
+    }
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    document.getElementById('filter').addEventListener('input', function () {
+        const filterValue = this.value.toLowerCase();
+        const rows = document.querySelectorAll('#userTableBody tr');
+        rows.forEach(row => {
+            const name = row.cells[0].textContent.toLowerCase();
+            const surname = row.cells[1].textContent.toLowerCase();
+            if (name.includes(filterValue) || surname.includes(filterValue)) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    });
+
+    function deleteUser(userId) {
+        const accessToken = localStorage.getItem('access_token')
+        if (confirm("Вы уверены, что хотите уволить этого пользователя?")) {
+            fetch(`/users/delete/${userId}/`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Token ${accessToken}`,
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                }
+            })
+                .then(response => {
+                    if (response.ok) {
+                        alert("Пользователь успешно уволен.")
+                    } else {
+                        alert("Ошибка при увольнении пользователя.");
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка:', error);
+                });
+        }
+    }
+
+    async function addUser() {
+        const userInfo = document.getElementById('userInfo');
+        userInfo.innerHTML = `
+                           <h2>Добавить пользователя</h2>
+                <form id="addUserForm">
+                    <label for="first_name">Имя:</label>
+                    <input type="text" id="first_name" name="first_name" required>
+                    <br>
+                    <label for="last_name">Фамилия:</label>
+                    <input type="text" id="last_name" name="last_name" required>
+                    <br>
+                    <input type="hidden" id="username" name="username">
+                    <label for="position">Должность:</label>
+                    <select id="position" name="position" required>
+                    </select>
+                    <br>
+                    <button type="submit">Добавить</button>
+                </form>
+            `;
+        document.getElementById('userModal').style.display = 'block';
+
+
+        const positionsResponse = await fetch('/positions/');
+        const positions = await positionsResponse.json();
+        const positionSelect = document.getElementById('position');
+        positions.forEach(position => {
+            const option = document.createElement('option');
+            option.value = position.id;
+            option.textContent = position.title;
+            positionSelect.appendChild(option);
+        });
+
+        document.getElementById('addUserForm').onsubmit = async (e) => {
+            const accessToken = localStorage.getItem('access_token')
+            const firstName = document.getElementById('first_name').value;
+            document.getElementById('username').value = firstName;
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            await fetch('/users/create/', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Token ${accessToken}`,
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken'),
+                },
+                body: JSON.stringify(data),
+            });
+            closeModal();
+            fetchUsers();
+        };
+    }
+
+    window.addEventListener('load', displayWelcomeMessage)
+    window.addEventListener('load', fetchUsers)
+
+
+    const toggleFormBtn = document.getElementById('togglePositionFormBtn');
+    const positionForm = document.getElementById('positionForm');
+
+
+    toggleFormBtn.addEventListener('click', function () {
+        if (positionForm.style.display === 'none' || positionForm.style.display === '') {
+            positionForm.style.display = 'block';
+        } else {
+            positionForm.style.display = 'none';
+        }
+    });
+
+    positionForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+
+
+        const accessToken = localStorage.getItem('access_token')
+        const formData = new FormData(positionForm);
+        const data = Object.fromEntries(formData);
+
+        fetch('/positions/', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Token ${accessToken}`,
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: JSON.stringify(data),
+        }).then(response => {
+            if (response.ok) {
+                alert('Должность успешно создана');
+                positionForm.style.display = 'none';
+            } else {
+                if (response.status === 403) {
+                    throw new Error('Доступ запрещен. У вас нет прав для выполнения этого действия.');
+                }
+            }
+        }).catch(error => {
+            console.error('Ошибка:', error);
+            alert('Ошибка при создании должности');
+        });
+    });
+
+</script>
+</body>
+</html>

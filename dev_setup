@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -e
+
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+
+./manage.py makemigrations
+./manage.py makemigrations app
+./manage.py migrate
+#./manage.py createsuperuser
+
+python setup_db.py
+
+#sqlite3 db.sqlite3 <<EOF
+#insert into app.position(title, rights_level) values
+#('inactive employee', 'INACTIVE'),
+#('EMPLOYEE', 'EMPLOYEE'),
+#('MANAGER', 'MANAGER'),
+#('ADMIN', 'ADMIN');
+#EOF
+
+#sqlite3 db.sqlite3 <<EOF
+#insert into app.user(username, first_name, last_name, password, position, date_joined, position) values
+#('John', 'John', 'Doe', 'password', 1, '2025-01-01'),
+#('Alice', 'Alice', 'Smith', 'password', 2, '2025-01-02'),
+#('Brian', 'Brian', 'White', 'password', 3, '2025-01-03'),
+#('Catherine', 'Catherine', 'Johnson', 'password', 4, '2025-01-04'),
+#('Michael', 'Michael', 'Jackson', 'password', 1, '2025-01-05'),
+#('Laura', 'Laura', 'Clark', 'password', 2, '2025-01-06');
+#EOF
